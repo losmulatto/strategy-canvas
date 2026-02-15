@@ -39,9 +39,21 @@ interface Interaction {
   timestamp: number;
 }
 
+interface GeneratedContent {
+  postIts?: Array<{ text: string; color: string; category: string }>;
+  milestones?: Array<{ title: string; date: string; description: string; status: string }>;
+  summary?: string;
+  decision?: string;
+  nextSteps?: string[];
+  risks?: string[];
+  insights?: string[];
+}
+
 interface AICoachProps {
   /** Canvas elements to send as context — pass from parent/store */
   elements?: CanvasElement[];
+  /** Generated content from workshop analysis */
+  generatedContent?: GeneratedContent | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +95,7 @@ function renderMarkdown(text: string): string {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function AICoach({ elements = [] }: AICoachProps) {
+export default function AICoach({ elements = [], generatedContent }: AICoachProps) {
   // Panel state
   const [isOpen, setIsOpen] = useState(false);
 
@@ -296,6 +308,82 @@ export default function AICoach({ elements = [] }: AICoachProps) {
         className="flex-1 overflow-y-auto px-4 py-3 text-sm leading-relaxed
                    text-zinc-700 dark:text-zinc-300"
       >
+        {/* Generated content summary */}
+        {generatedContent && (
+          <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-4 w-4 text-green-600" />
+              <span className="text-xs font-semibold text-green-700 dark:text-green-300">
+                AI-generoitu analyysi
+              </span>
+            </div>
+
+            {generatedContent.summary && (
+              <p className="text-sm text-green-800 dark:text-green-200 mb-2">
+                {generatedContent.summary}
+              </p>
+            )}
+
+            {generatedContent.decision && (
+              <div className="flex items-start gap-2 mt-2 p-2 rounded bg-green-100 dark:bg-green-900">
+                <span className="text-green-600">📋</span>
+                <div>
+                  <span className="text-xs font-medium text-green-700 dark:text-green-300">Päätös:</span>
+                  <p className="text-sm text-green-800 dark:text-green-200">{generatedContent.decision}</p>
+                </div>
+              </div>
+            )}
+
+            {generatedContent.nextSteps && generatedContent.nextSteps.length > 0 && (
+              <div className="mt-2">
+                <span className="text-xs font-medium text-green-700 dark:text-green-300">Seuraavat askeleet:</span>
+                <ul className="mt-1 space-y-1">
+                  {generatedContent.nextSteps.map((step, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs text-green-700 dark:text-green-200">
+                      <span className="text-green-500">👣</span>
+                      {step}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {generatedContent.risks && generatedContent.risks.length > 0 && (
+              <div className="mt-2">
+                <span className="text-xs font-medium text-amber-700 dark:text-amber-300">Riskit:</span>
+                <ul className="mt-1 space-y-1">
+                  {generatedContent.risks.map((risk, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-200">
+                      <span className="text-amber-500">⚠️</span>
+                      {risk}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {generatedContent.insights && generatedContent.insights.length > 0 && (
+              <div className="mt-2">
+                <span className="text-xs font-medium text-blue-700 dark:text-blue-300">Oivallukset:</span>
+                <ul className="mt-1 space-y-1">
+                  {generatedContent.insights.map((insight, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs text-blue-700 dark:text-blue-200">
+                      <span className="text-blue-500">💡</span>
+                      {insight}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="mt-3 flex gap-2 text-xs text-green-600 dark:text-green-400">
+              <span>📝 {generatedContent.postIts?.length || 0} post-itia</span>
+              <span>•</span>
+              <span>🎯 {generatedContent.milestones?.length || 0} virstanpylvästä</span>
+            </div>
+          </div>
+        )}
+
         {/* Error */}
         {error && (
           <div className="mb-3 flex items-start gap-2 rounded-md bg-red-50 p-3 text-red-700 dark:bg-red-950 dark:text-red-300">

@@ -15,13 +15,29 @@ import {
   eachYearOfInterval,
   isWithinInterval,
 } from "date-fns";
-import { Plus, ZoomIn, ZoomOut, CalendarRange } from "lucide-react";
+import { Plus, ZoomIn, ZoomOut, CalendarRange, Wand2 } from "lucide-react";
 import MilestoneCard from "./MilestoneCard";
 import {
   useRoadmapStore,
   type TimelineZoom,
   type Milestone,
+  type MilestoneStatus,
 } from "@/store/roadmapStore";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface GeneratedMilestone {
+  title: string;
+  date: string;
+  description: string;
+  status: "planned" | "in-progress" | "completed";
+}
+
+interface RoadmapProps {
+  generatedMilestones?: GeneratedMilestone[];
+}
 
 // ---------------------------------------------------------------------------
 // Zoom config
@@ -60,7 +76,7 @@ function computeOrigin(milestones: Milestone[]): Date {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function Roadmap() {
+export default function Roadmap({ generatedMilestones }: RoadmapProps) {
   const {
     milestones,
     zoom,
@@ -72,10 +88,33 @@ export default function Roadmap() {
   } = useRoadmapStore();
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [hasImportedGenerated, setHasImportedGenerated] = useState(false);
 
   // --- Hydration guard (zustand persist produces mismatch on SSR) ----------
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
+
+  // --- Import generated milestones ---
+  const importGeneratedMilestones = useCallback(() => {
+    if (!generatedMilestones?.length) return;
+
+    const statusMap: Record<string, MilestoneStatus> = {
+      planned: "future",
+      "in-progress": "in-progress",
+      completed: "done",
+    };
+
+    generatedMilestones.forEach((gen) => {
+      addMilestone({
+        title: gen.title,
+        description: gen.description,
+        date: gen.date,
+        status: statusMap[gen.status] || "future",
+      });
+    });
+
+    setHasImportedGenerated(true);
+  }, [generatedMilestones, addMilestone]);
 
   // --- Derived timeline geometry -------------------------------------------
   const config = ZOOM_CONFIG[zoom];
@@ -220,6 +259,18 @@ export default function Roadmap() {
               <ZoomOut className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Import generated */}
+          {generatedMilestones && generatedMilestones.length > 0 && !hasImportedGenerated && (
+            <button
+              type="button"
+              onClick={importGeneratedMilestones}
+              className="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors hover:from-purple-500 hover:to-blue-500 animate-pulse"
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+              Tuo {generatedMilestones.length} AI-virstanpylvästä
+            </button>
+          )}
 
           {/* Add */}
           <button

@@ -1,8 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Lightbulb, Map, MessageSquare, ChevronLeft, ChevronRight, Rocket } from "lucide-react";
+import {
+  Lightbulb,
+  Map,
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight,
+  Rocket,
+  Sparkles,
+  Loader2,
+  Download,
+  Check,
+} from "lucide-react";
+import { useWorkshopStore, COLOR_MAP, AIGeneratedContent } from "@/store/workshopStore";
 
 // Dynamic imports for client-only components
 const Canvas = dynamic(() => import("@/components/Canvas"), { ssr: false });
@@ -232,9 +244,52 @@ export default function Home() {
   const [currentSection, setCurrentSection] = useState(0);
   const [mounted, setMounted] = useState(false);
 
+  const {
+    generatedContent,
+    isGenerating,
+    setIsGenerating,
+    setGeneratedContent,
+    getWorkshopSummary,
+  } = useWorkshopStore();
+
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Generate visualizations from workshop data
+  const handleGenerateVisualizations = useCallback(async () => {
+    const workshopContent = getWorkshopSummary();
+
+    if (workshopContent === "Ei vielä syötteitä.") {
+      alert("Täytä ensin työpajan muistiinpanoja ja vastauksia.");
+      return;
+    }
+
+    setIsGenerating(true);
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workshopContent }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Generation failed");
+      }
+
+      const { content } = await response.json();
+      setGeneratedContent(content);
+
+      // Switch to post-its view to show results
+      setView("postits");
+    } catch (error) {
+      console.error("Generation error:", error);
+      alert("Visualisointien generointi epäonnistui. Yritä uudelleen.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [getWorkshopSummary, setGeneratedContent, setIsGenerating]);
 
   if (!mounted) {
     return (
@@ -268,7 +323,7 @@ export default function Home() {
           </button>
           <button
             onClick={() => setView("postits")}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
+            className={`relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
               view === "postits"
                 ? "bg-yellow-500 text-zinc-900"
                 : "text-zinc-400 hover:text-white"
@@ -276,6 +331,9 @@ export default function Home() {
           >
             📝
             Post-it
+            {generatedContent && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-green-500" />
+            )}
           </button>
           <button
             onClick={() => setView("canvas")}
@@ -290,7 +348,7 @@ export default function Home() {
           </button>
           <button
             onClick={() => setView("roadmap")}
-            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
+            className={`relative flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
               view === "roadmap"
                 ? "bg-blue-600 text-white"
                 : "text-zinc-400 hover:text-white"
@@ -298,19 +356,48 @@ export default function Home() {
           >
             <Map className="h-4 w-4" />
             Roadmap
+            {generatedContent?.milestones?.length && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-green-500" />
+            )}
           </button>
         </div>
 
-        {/* AI Toggle */}
-        <button
-          onClick={() => setShowAI(!showAI)}
-          className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
-            showAI ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-400"
-          }`}
-        >
-          <MessageSquare className="h-4 w-4" />
-          AI Coach
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {/* Generate Button */}
+          <button
+            onClick={handleGenerateVisualizations}
+            disabled={isGenerating}
+            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition ${
+              isGenerating
+                ? "bg-zinc-700 text-zinc-400"
+                : "bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-500 hover:to-blue-500"
+            }`}
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Generoidaan...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                Generoi visualisoinnit
+              </>
+            )}
+          </button>
+
+          {/* AI Toggle */}
+          <button
+            onClick={() => setShowAI(!showAI)}
+            className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition ${
+              showAI ? "bg-purple-600 text-white" : "bg-zinc-800 text-zinc-400"
+            }`}
+          >
+            <MessageSquare className="h-4 w-4" />
+            AI Coach
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -326,7 +413,7 @@ export default function Home() {
           )}
           {view === "postits" && (
             <div className="h-full">
-              <PostItCanvas />
+              <PostItCanvas generatedPostIts={generatedContent?.postIts} />
             </div>
           )}
           {view === "canvas" && (
@@ -336,7 +423,7 @@ export default function Home() {
           )}
           {view === "roadmap" && (
             <div className="p-4">
-              <Roadmap />
+              <Roadmap generatedMilestones={generatedContent?.milestones} />
             </div>
           )}
         </main>
@@ -344,10 +431,36 @@ export default function Home() {
         {/* AI Coach Panel */}
         {showAI && (
           <aside className="w-96 border-l border-zinc-800 bg-zinc-950">
-            <AICoach elements={[]} />
+            <AICoach
+              elements={[]}
+              generatedContent={generatedContent}
+            />
           </aside>
         )}
       </div>
+
+      {/* Generated Content Banner */}
+      {generatedContent && (
+        <div className="border-t border-green-800 bg-green-950/50 px-4 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-green-400">
+              <Check className="h-4 w-4" />
+              <span>
+                Visualisoinnit generoitu: {generatedContent.postIts?.length || 0} post-itia,{" "}
+                {generatedContent.milestones?.length || 0} virstanpylvästä
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-green-300/70">
+              {generatedContent.decision && (
+                <span>📋 Päätös: {generatedContent.decision}</span>
+              )}
+              {generatedContent.nextSteps?.length > 0 && (
+                <span>👣 {generatedContent.nextSteps.length} seuraavaa askelta</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -363,6 +476,12 @@ function WorkshopView({
   onSectionChange: (idx: number) => void;
 }) {
   const section = template.sections[currentSection];
+  const { exerciseData } = useWorkshopStore();
+
+  // Count completed exercises (with notes)
+  const completedCount = section.exercises.filter(
+    (ex) => exerciseData[ex.id]?.notes?.trim()
+  ).length;
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -403,7 +522,22 @@ function WorkshopView({
 
       {/* Section Header */}
       <div className="mb-8">
-        <h2 className="text-2xl font-bold text-white">{section.title}</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-white">{section.title}</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-zinc-500">
+              {completedCount}/{section.exercises.length} täytetty
+            </span>
+            <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-700">
+              <div
+                className="h-full bg-green-500 transition-all"
+                style={{
+                  width: `${(completedCount / section.exercises.length) * 100}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
         <p className="text-zinc-400">Kesto: {section.duration}</p>
       </div>
 
@@ -453,12 +587,54 @@ interface Exercise {
 
 // Exercise Card Component
 function ExerciseCard({ exercise }: { exercise: Exercise }) {
-  const [notes, setNotes] = useState("");
+  const { exerciseData, updateExerciseData } = useWorkshopStore();
+  const data = exerciseData[exercise.id] || {
+    notes: "",
+    answers: {},
+    weights: {},
+    selections: [],
+  };
+
+  const handleNotesChange = (notes: string) => {
+    updateExerciseData(exercise.id, { notes });
+  };
+
+  const handleAnswerChange = (question: string, answer: string) => {
+    updateExerciseData(exercise.id, {
+      answers: { ...data.answers, [question]: answer },
+    });
+  };
+
+  const handleWeightChange = (criterion: string, weight: number) => {
+    updateExerciseData(exercise.id, {
+      weights: { ...data.weights, [criterion]: weight },
+    });
+  };
+
+  const handleOptionToggle = (option: string) => {
+    const newSelections = data.selections.includes(option)
+      ? data.selections.filter((s) => s !== option)
+      : [...data.selections, option];
+    updateExerciseData(exercise.id, { selections: newSelections });
+  };
+
+  const hasContent =
+    data.notes?.trim() ||
+    Object.keys(data.answers).length > 0 ||
+    Object.keys(data.weights).length > 0 ||
+    data.selections.length > 0;
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-800/50 p-4">
+    <div
+      className={`rounded-lg border p-4 transition-colors ${
+        hasContent
+          ? "border-green-800 bg-green-950/20"
+          : "border-zinc-800 bg-zinc-800/50"
+      }`}
+    >
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-semibold text-white">
+        <h3 className="flex items-center gap-2 font-semibold text-white">
+          {hasContent && <Check className="h-4 w-4 text-green-500" />}
           {exercise.id}. {exercise.title}
         </h3>
         <span className="text-sm text-zinc-500">{exercise.duration}</span>
@@ -483,11 +659,20 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
       {exercise.questions && (
         <div className="mb-4">
           <h4 className="mb-2 text-sm font-medium text-zinc-400">Kysymykset:</h4>
-          <ul className="space-y-1">
+          <ul className="space-y-2">
             {exercise.questions.map((q, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-sm text-zinc-300">
-                <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-yellow-500" />
-                {q}
+              <li key={idx} className="rounded bg-zinc-700/50 p-2">
+                <label className="mb-1 flex items-start gap-2 text-sm text-zinc-300">
+                  <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-yellow-500" />
+                  {q}
+                </label>
+                <input
+                  type="text"
+                  value={data.answers[q] || ""}
+                  onChange={(e) => handleAnswerChange(q, e.target.value)}
+                  placeholder="Vastauksesi..."
+                  className="mt-1 w-full rounded bg-zinc-600 px-2 py-1 text-sm placeholder-zinc-400"
+                />
               </li>
             ))}
           </ul>
@@ -497,15 +682,20 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
       {/* Options */}
       {exercise.options && (
         <div className="mb-4">
-          <h4 className="mb-2 text-sm font-medium text-zinc-400">Vaihtoehdot:</h4>
+          <h4 className="mb-2 text-sm font-medium text-zinc-400">Vaihtoehdot (valitse):</h4>
           <div className="flex flex-wrap gap-2">
             {exercise.options.map((opt, idx) => (
-              <span
+              <button
                 key={idx}
-                className="rounded-full bg-zinc-700 px-3 py-1 text-sm text-zinc-300"
+                onClick={() => handleOptionToggle(opt)}
+                className={`rounded-full px-3 py-1 text-sm transition ${
+                  data.selections.includes(opt)
+                    ? "bg-blue-600 text-white"
+                    : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                }`}
               >
                 {opt}
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -523,7 +713,8 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
                   type="number"
                   min="1"
                   max="5"
-                  defaultValue="3"
+                  value={data.weights[c] || 3}
+                  onChange={(e) => handleWeightChange(c, parseInt(e.target.value) || 3)}
                   className="w-12 rounded bg-zinc-600 px-2 py-1 text-center text-sm"
                 />
               </div>
@@ -544,6 +735,8 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
                 </label>
                 <textarea
                   rows={2}
+                  value={data.answers[scenario] || ""}
+                  onChange={(e) => handleAnswerChange(scenario, e.target.value)}
                   placeholder="Kirjoita tähän..."
                   className="w-full rounded bg-zinc-600 px-3 py-2 text-sm placeholder-zinc-500"
                 />
@@ -559,8 +752,8 @@ function ExerciseCard({ exercise }: { exercise: Exercise }) {
           Muistiinpanot:
         </label>
         <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          value={data.notes}
+          onChange={(e) => handleNotesChange(e.target.value)}
           rows={3}
           placeholder="Kirjoita keskustelun ydinkohdat tähän..."
           className="w-full rounded bg-zinc-700 px-3 py-2 text-sm placeholder-zinc-500"

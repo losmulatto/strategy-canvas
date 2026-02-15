@@ -17,6 +17,7 @@ import {
   X,
   Copy,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 
 // ============================================================================
@@ -44,6 +45,16 @@ interface Group {
   color: string;
 }
 
+interface GeneratedPostIt {
+  text: string;
+  color: "yellow" | "green" | "blue" | "red" | "purple" | "orange";
+  category: string;
+}
+
+interface PostItCanvasProps {
+  generatedPostIts?: GeneratedPostIt[];
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -56,6 +67,15 @@ const COLORS = [
   { name: "Violetti", hex: "#e9d5ff", dark: "#9333ea" },
   { name: "Oranssi", hex: "#fed7aa", dark: "#ea580c" },
 ];
+
+const COLOR_NAME_TO_HEX: Record<string, string> = {
+  yellow: "#fef08a",
+  green: "#bbf7d0",
+  blue: "#bfdbfe",
+  red: "#fecaca",
+  purple: "#e9d5ff",
+  orange: "#fed7aa",
+};
 
 const TIMER_PRESETS = [
   { label: "3 min", seconds: 180 },
@@ -70,7 +90,7 @@ const STORAGE_KEY = "strategy-canvas-postits-v2";
 // Main Component
 // ============================================================================
 
-export default function PostItCanvas() {
+export default function PostItCanvas({ generatedPostIts }: PostItCanvasProps) {
   // State
   const [postIts, setPostIts] = useState<PostIt[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -93,6 +113,7 @@ export default function PostItCanvas() {
   const [groupEnd, setGroupEnd] = useState<{ x: number; y: number } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [hasImportedGenerated, setHasImportedGenerated] = useState(false);
 
   // ---- Load/Save ----
   useEffect(() => {
@@ -107,6 +128,24 @@ export default function PostItCanvas() {
       }
     }
   }, []);
+
+  // ---- Import generated post-its ----
+  const importGeneratedPostIts = useCallback(() => {
+    if (!generatedPostIts?.length) return;
+
+    const newPostIts: PostIt[] = generatedPostIts.map((gen, i) => ({
+      id: `generated-${Date.now()}-${i}`,
+      text: gen.text,
+      color: COLOR_NAME_TO_HEX[gen.color] || "#fef08a",
+      x: 150 + (i % 5) * 180,
+      y: 150 + Math.floor(i / 5) * 160,
+      votes: 0,
+      createdAt: Date.now(),
+    }));
+
+    setPostIts((prev) => [...prev, ...newPostIts]);
+    setHasImportedGenerated(true);
+  }, [generatedPostIts]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ postIts, groups }));
@@ -571,6 +610,17 @@ export default function PostItCanvas() {
           <div className="rounded-lg bg-green-600 px-3 py-2 text-sm text-white shadow animate-pulse">
             🗳️ Äänestys käynnissä — klikkaa post-iteja!
           </div>
+        )}
+
+        {/* Import generated post-its */}
+        {generatedPostIts && generatedPostIts.length > 0 && !hasImportedGenerated && (
+          <button
+            onClick={importGeneratedPostIts}
+            className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:from-purple-500 hover:to-blue-500 transition animate-pulse"
+          >
+            <Wand2 className="h-4 w-4" />
+            Tuo {generatedPostIts.length} AI-generoitua post-itia
+          </button>
         )}
       </div>
 
