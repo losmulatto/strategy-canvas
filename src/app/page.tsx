@@ -13,6 +13,9 @@ import {
   Loader2,
   Download,
   Check,
+  Copy,
+  Terminal,
+  X,
 } from "lucide-react";
 import { useWorkshopStore, COLOR_MAP, AIGeneratedContent } from "@/store/workshopStore";
 
@@ -256,7 +259,7 @@ export default function Home() {
     setMounted(true);
   }, []);
 
-  // Generate visualizations from workshop data
+  // Generate visualizations from workshop data (API)
   const handleGenerateVisualizations = useCallback(async () => {
     const workshopContent = getWorkshopSummary();
 
@@ -290,6 +293,58 @@ export default function Home() {
       setIsGenerating(false);
     }
   }, [getWorkshopSummary, setGeneratedContent, setIsGenerating]);
+
+  // Copy for Claude Code (uses Max subscription)
+  const [showClaudeCodeModal, setShowClaudeCodeModal] = useState(false);
+  const [claudeCodeResponse, setClaudeCodeResponse] = useState("");
+
+  const handleCopyForClaudeCode = useCallback(() => {
+    const workshopContent = getWorkshopSummary();
+
+    if (workshopContent === "Ei vielä syötteitä.") {
+      alert("Täytä ensin työpajan muistiinpanoja ja vastauksia.");
+      return;
+    }
+
+    const prompt = `Analysoi tämä työpajamateriaali ja generoi JSON-vastaus.
+
+MATERIAALI:
+${workshopContent}
+
+GENEROI JSON (vain JSON, ei muuta):
+{
+  "postIts": [{"text": "max 50 merkkiä", "color": "yellow|green|blue|red|purple|orange", "category": "arvo|tavoite|riski|idea|ratkaisu|toimenpide"}],
+  "milestones": [{"title": "otsikko", "date": "YYYY-MM-DD", "description": "kuvaus", "status": "planned"}],
+  "summary": "1-3 lauseen yhteenveto",
+  "decision": "päätös jos tehty",
+  "nextSteps": ["askel1", "askel2"],
+  "risks": ["riski1"],
+  "insights": ["oivallus1"]
+}
+
+Luo 8-15 post-itia, värit kategorioiden mukaan. Milestoneissa realistiset päivämäärät tästä päivästä eteenpäin.`;
+
+    navigator.clipboard.writeText(prompt);
+    setShowClaudeCodeModal(true);
+  }, [getWorkshopSummary]);
+
+  const handleImportClaudeCodeResponse = useCallback(() => {
+    try {
+      // Extract JSON from response
+      const jsonMatch = claudeCodeResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        alert("JSON:ia ei löytynyt vastauksesta. Kopioi koko JSON-vastaus.");
+        return;
+      }
+      const content = JSON.parse(jsonMatch[0]);
+      setGeneratedContent(content);
+      setShowClaudeCodeModal(false);
+      setClaudeCodeResponse("");
+      setView("postits");
+    } catch (error) {
+      alert("JSON:in jäsennys epäonnistui. Tarkista vastaus.");
+    }
+  }, [claudeCodeResponse, setGeneratedContent]);
 
   if (!mounted) {
     return (
@@ -364,7 +419,17 @@ export default function Home() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {/* Generate Button */}
+          {/* Claude Code Button (uses Max subscription) */}
+          <button
+            onClick={handleCopyForClaudeCode}
+            className="flex items-center gap-2 rounded-md bg-zinc-700 px-3 py-2 text-sm font-medium text-zinc-200 hover:bg-zinc-600 transition"
+            title="Käytä Claude Code Max -tilausta (ilmainen)"
+          >
+            <Terminal className="h-4 w-4" />
+            Claude Code
+          </button>
+
+          {/* Generate Button (API, paid) */}
           <button
             onClick={handleGenerateVisualizations}
             disabled={isGenerating}
@@ -373,6 +438,7 @@ export default function Home() {
                 ? "bg-zinc-700 text-zinc-400"
                 : "bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-500 hover:to-blue-500"
             }`}
+            title="Käytä API:a (maksullinen)"
           >
             {isGenerating ? (
               <>
@@ -382,7 +448,7 @@ export default function Home() {
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Generoi visualisoinnit
+                API
               </>
             )}
           </button>
@@ -457,6 +523,68 @@ export default function Home() {
               {generatedContent.nextSteps?.length > 0 && (
                 <span>👣 {generatedContent.nextSteps.length} seuraavaa askelta</span>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Claude Code Modal */}
+      {showClaudeCodeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="w-full max-w-2xl rounded-xl bg-zinc-900 p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="h-5 w-5 text-green-500" />
+                <h2 className="text-lg font-semibold text-white">Claude Code (Max-tilaus)</h2>
+              </div>
+              <button
+                onClick={() => setShowClaudeCodeModal(false)}
+                className="rounded p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-lg bg-green-950/50 border border-green-800 p-4">
+                <div className="flex items-center gap-2 text-green-400 mb-2">
+                  <Check className="h-4 w-4" />
+                  <span className="font-medium">Vaihe 1: Prompt kopioitu leikepöydälle!</span>
+                </div>
+                <p className="text-sm text-green-300/80">
+                  Liitä se Claude Code:iin (Cmd+V / Ctrl+V) ja paina Enter.
+                </p>
+              </div>
+
+              <div className="rounded-lg bg-zinc-800 p-4">
+                <label className="mb-2 block text-sm font-medium text-zinc-300">
+                  Vaihe 2: Liitä Claude Code:n JSON-vastaus tähän:
+                </label>
+                <textarea
+                  value={claudeCodeResponse}
+                  onChange={(e) => setClaudeCodeResponse(e.target.value)}
+                  rows={10}
+                  placeholder='{"postIts": [...], "milestones": [...], ...}'
+                  className="w-full rounded-lg bg-zinc-700 px-4 py-3 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-500 font-mono"
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleImportClaudeCodeResponse}
+                  disabled={!claudeCodeResponse.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-3 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                >
+                  <Download className="h-4 w-4" />
+                  Tuo visualisoinnit
+                </button>
+                <button
+                  onClick={() => setShowClaudeCodeModal(false)}
+                  className="rounded-lg bg-zinc-700 px-4 py-3 text-sm text-zinc-300 hover:bg-zinc-600 transition"
+                >
+                  Peruuta
+                </button>
+              </div>
             </div>
           </div>
         </div>
