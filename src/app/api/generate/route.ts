@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const client = new Anthropic();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
-const GENERATION_PROMPT = `Olet strategiatyöpajan assistentti. Analysoi alla oleva työpajamateriaan ja generoi strukturoitu JSON-vastaus.
+const GENERATION_PROMPT = `Olet strategiatyöpajan assistentti. Analysoi alla oleva työpajamateriaali ja generoi strukturoitu JSON-vastaus.
 
 MATERIAALI:
 {CONTENT}
@@ -56,27 +56,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = GENERATION_PROMPT.replace("{CONTENT}", workshopContent);
-
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
-
-    // Extract text response
-    const textContent = message.content.find((c) => c.type === "text");
-    if (!textContent || textContent.type !== "text") {
-      throw new Error("No text response from AI");
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { error: "GEMINI_API_KEY not configured" },
+        { status: 500 }
+      );
     }
 
+    const prompt = GENERATION_PROMPT.replace("{CONTENT}", workshopContent);
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
     // Parse JSON from response
-    const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error("Could not extract JSON from response");
     }

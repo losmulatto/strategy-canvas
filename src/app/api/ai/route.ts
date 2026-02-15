@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest } from "next/server";
 
 // ---------------------------------------------------------------------------
@@ -109,10 +109,10 @@ function validateRequestBody(body: unknown): AIRequestBody {
 
 export async function POST(request: NextRequest) {
   // 1. Validate API key exists
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "ANTHROPIC_API_KEY is not configured" }),
+      JSON.stringify({ error: "GEMINI_API_KEY is not configured" }),
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -136,6 +136,8 @@ export async function POST(request: NextRequest) {
   const canvasContext = elementsToContext(elements);
 
   const userMessage = [
+    systemPrompt,
+    "",
     canvasContext,
     "",
     "---",
@@ -143,29 +145,23 @@ export async function POST(request: NextRequest) {
     `Kayttajan pyynto: ${prompt}`,
   ].join("\n");
 
-  // 4. Create Anthropic client and stream
-  const client = new Anthropic({ apiKey });
+  // 4. Create Gemini client and stream
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
   try {
-    const stream = client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2048,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    });
+    const result = await model.generateContentStream(userMessage);
 
-    // 5. Convert SDK stream to web ReadableStream
+    // 5. Convert Gemini stream to web ReadableStream
     const readable = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
 
         try {
-          for await (const event of stream) {
-            if (
-              event.type === "content_block_delta" &&
-              event.delta.type === "text_delta"
-            ) {
-              controller.enqueue(encoder.encode(event.delta.text));
+          for await (const chunk of result.stream) {
+            const text = chunk.text();
+            if (text) {
+              controller.enqueue(encoder.encode(text));
             }
           }
           controller.close();
@@ -183,7 +179,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Anthropic API error";
+    const message = err instanceof Error ? err.message : "Gemini API error";
     return new Response(
       JSON.stringify({ error: message }),
       { status: 502, headers: { "Content-Type": "application/json" } },
